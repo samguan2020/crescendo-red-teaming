@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Crescendo Red-Teaming: a personal research project implementing Microsoft's Crescendo multi-turn jailbreak tactic against a panel of open-source LLMs.">
+<title>Crescendo Red-Teaming Case Study</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#eef0f5; --surface:#ffffff; --surface-2:#e3e6ef; --ink:#151a2c; --muted:#565d78; --line:#cfd4e2;
+  --gold:#a8790c; --blue:#2c58c9; --red:#b8322f; --green:#2f8a4e; --purple:#7c3aed; --orange:#c2622a;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0f1220; --surface:#171b2c; --surface-2:#1f2438; --ink:#e8eaf3; --muted:#9aa1bb; --line:#2c3250;
+    --gold:#e3b544; --blue:#7c9df5; --red:#ec7270; --green:#63c083; --purple:#b79bf7; --orange:#e3985f;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0f1220; --surface:#171b2c; --surface-2:#1f2438; --ink:#e8eaf3; --muted:#9aa1bb; --line:#2c3250;
+  --gold:#e3b544; --blue:#7c9df5; --red:#ec7270; --green:#63c083; --purple:#b79bf7; --orange:#e3985f;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.6;margin:0}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:20px;padding-block:40px 72px}
+a{color:var(--blue);text-underline-offset:3px}
+a:focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:2px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.1}
+h2{font-size:clamp(26px,3.4vw,34px);font-weight:800;letter-spacing:-.01em}
+h3{font-size:19px;font-weight:700}
+p{margin:0}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+code,.mono{font-family:var(--mono);font-size:.86em}
+code{background:var(--surface-2);padding:1px 6px;border-radius:4px}
+
+.hero{padding-bottom:40px;border-bottom:1px solid var(--line)}
+.hero h1{font-size:clamp(36px,6vw,58px);font-weight:800;letter-spacing:-.025em;margin-top:14px}
+.thesis{font-size:21px;line-height:1.5;margin-top:20px;max-width:62ch}
+.thesis strong{color:var(--blue)}
+.callout{margin-top:18px;max-width:62ch;font-size:14.5px;color:var(--muted);border-left:3px solid var(--orange);padding:4px 0 4px 14px}
+.links{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+.btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13px;padding:10px 14px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);text-decoration:none}
+.btn:hover{border-color:var(--blue)}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+:root:not([data-theme="light"]) .btn.primary{color:#fff}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:40px;border-bottom:1px solid var(--line);padding-bottom:0}
+.stat{padding:24px 18px 24px 0;display:flex;flex-direction:column;gap:4px}
+.stat + .stat{padding-left:18px;border-left:1px solid var(--line)}
+.stat b{font-family:var(--display);font-size:32px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+.stat span{font-size:14px;color:var(--muted);line-height:1.35}
+
+section{padding-top:64px}
+.lede{color:var(--muted);max-width:66ch;margin-top:12px}
+.sec-head{display:flex;flex-direction:column;gap:8px}
+
+.pipeline{margin-top:28px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;counter-reset:s}
+.pipe{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:6px;counter-increment:s}
+.pipe::before{content:counter(s);font-family:var(--mono);font-size:12px;color:var(--blue);font-weight:600}
+.pipe h3{font-size:16px}
+.pipe p{font-size:14px;color:var(--muted);line-height:1.45}
+
+.arch{margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;overflow-x:auto}
+.arch svg{display:block;min-width:760px;width:100%;height:auto}
+.arch text{font-family:var(--body)}
+
+.cascade{margin-top:28px;display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+.cstep{flex:1;min-width:180px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;position:relative}
+.cstep h3{font-size:15px;font-family:var(--mono)}
+.cstep p{font-size:13.5px;color:var(--muted);margin-top:6px;line-height:1.4}
+.arrow{display:flex;align-items:center;justify-content:center;width:36px;color:var(--muted);font-family:var(--mono)}
+
+.verdicts{margin-top:28px;display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.verdict{border-radius:8px;padding:14px 12px;border:1px solid var(--line);background:var(--surface)}
+.verdict .tag{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.03em;padding:3px 7px;border-radius:5px;display:inline-block}
+.verdict p{font-size:13px;color:var(--muted);margin-top:8px;line-height:1.4}
+.v-refusal .tag{background:color-mix(in srgb,var(--muted) 20%,transparent);color:var(--muted)}
+.v-compliant .tag{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+.v-near .tag{background:color-mix(in srgb,var(--gold) 20%,transparent);color:var(--gold)}
+.v-jailbroken .tag{background:color-mix(in srgb,var(--red) 18%,transparent);color:var(--red)}
+.v-error .tag{background:color-mix(in srgb,var(--purple) 18%,transparent);color:var(--purple)}
+
+.models{margin-top:20px;display:flex;flex-wrap:wrap;gap:8px}
+.model{font-family:var(--mono);font-size:13px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+
+.lessons{margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.lesson{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:10px}
+.lesson .sym{font-family:var(--mono);font-size:12px;color:var(--blue);letter-spacing:.04em;text-transform:uppercase;font-weight:600}
+.lesson p{font-size:15.5px}
+
+.refbox{margin-top:24px;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--orange);border-radius:8px;padding:20px 22px}
+.refbox p{font-size:15px;line-height:1.6}
+.refbox .cite{margin-top:10px;font-size:14px;color:var(--muted)}
+.refbox .disclaim{margin-top:14px;font-size:13.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+
+.safety{margin-top:24px;background:color-mix(in srgb,var(--red) 7%,var(--surface));border:1px solid color-mix(in srgb,var(--red) 30%,var(--line));border-radius:10px;padding:18px 20px}
+.safety p{font-size:14.5px;color:var(--ink)}
+.safety .eyebrow{color:var(--red)}
+
+.foot{margin-top:64px;padding-top:20px;border-top:1px solid var(--line);font-size:14px;color:var(--muted);display:flex;flex-wrap:wrap;gap:8px 24px}
+
+@media (max-width:860px){
+  .stats{grid-template-columns:1fr 1fr}
+  .stat:nth-child(3){padding-left:0;border-left:0}
+  .stat:nth-child(n+3){border-top:1px solid var(--line)}
+  .pipeline{grid-template-columns:1fr 1fr}
+  .verdicts{grid-template-columns:1fr 1fr 1fr}
+  .lessons{grid-template-columns:1fr}
+  .cascade{flex-direction:column}
+  .arrow{transform:rotate(90deg);width:auto;padding:4px 0}
+}
+@media (max-width:480px){
+  body{font-size:16px}
+  .pipeline{grid-template-columns:1fr}
+  .verdicts{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Case study · AI safety red-teaming · Multi-turn jailbreak evaluation</div>
+  <h1>Crescendo Red-Teaming</h1>
+  <p class="thesis">A personal research project automating a published multi-turn jailbreak tactic and running it against <strong>seven open-source LLMs in parallel</strong>, so their resistance to the same escalating attack can be compared side by side.</p>
+  <p class="callout">Built for authorized safety research and red-team evaluation of LLM safeguards — not for attacking models or services without permission.</p>
+  <div class="links">
+    <a class="btn primary" href="https://github.com/samguan2020/crescendo-red-teaming" target="_blank" rel="noopener">Source on GitHub ↗</a>
+    <a class="btn" href="https://arxiv.org/abs/2404.01833" target="_blank" rel="noopener">Read the paper ↗</a>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat"><b>7</b><span>open-source target models evaluated side by side per run</span></div>
+  <div class="stat"><b>3-tier</b><span>strategy cascade — an attacker refusal never fails the run</span></div>
+  <div class="stat"><b>5</b><span>verdict classes judge every turn, not just the final reply</span></div>
+  <div class="stat"><b>2</b><span>stores: Postgres for the durable trace, Redis for live polling</span></div>
+</div>
+
+<section id="how">
+  <div class="sec-head">
+    <div class="eyebrow">How it works</div>
+    <h2>One objective, evaluated the same way across every model</h2>
+  </div>
+  <p class="lede">The tactic comes from Microsoft Research's Crescendo paper: start a conversation from an innocuous, educational angle, then escalate each turn by referencing the model's own prior reply — the thing most safety filters aren't watching for.</p>
+  <div class="pipeline">
+    <div class="pipe"><h3>Submit objective</h3><p>A target objective and a set of models go into an async <code>AttackJob</code>.</p></div>
+    <div class="pipe"><h3>Plan the escalation</h3><p>Gemini, acting as the attacker, is prompted with the Crescendo guideline and returns a JSON plan of escalating turns.</p></div>
+    <div class="pipe"><h3>Run in parallel</h3><p>Each target model gets its own turn-by-turn conversation; models run concurrently, turns run in order per model.</p></div>
+    <div class="pipe"><h3>Judge every turn</h3><p>Each response is classified into a verdict, not just scored pass/fail at the end — see below.</p></div>
+  </div>
+</section>
+
+<section id="models">
+  <div class="sec-head">
+    <div class="eyebrow">Target panel</div>
+    <h2>Seven models, one attacker, one objective</h2>
+  </div>
+  <p class="lede">Targets are resolved through the HuggingFace router API, so adding a model to the comparison is a one-line config change, not a new integration.</p>
+  <div class="models">
+    <span class="model">Llama 3.1 8B</span>
+    <span class="model">Qwen 2.5 7B</span>
+    <span class="model">Gemma 3 27B</span>
+    <span class="model">DeepSeek V3</span>
+    <span class="model">Nemotron Nano 12B</span>
+    <span class="model">Kimi K2</span>
+    <span class="model">GPT-OSS 120B</span>
+  </div>
+</section>
+
+<section id="architecture">
+  <div class="sec-head">
+    <div class="eyebrow">Architecture</div>
+    <h2>Hexagonal core, pluggable everything — no frontend</h2>
+  </div>
+  <p class="lede">This is a backend-only research build. The domain layer — <code>AttackJob</code>, <code>Turn</code>, <code>Verdict</code>, the engine loop — has zero framework dependencies. Gemini, the HuggingFace router, Postgres, and Redis are all adapters behind ports, so any of them can be swapped without touching the attack logic. Routes are exercised directly (<code>curl</code>, scripts, or the FastAPI docs UI) rather than through a UI.</p>
+  <div class="arch">
+    <svg viewBox="0 0 820 300" role="img" aria-label="Architecture: an HTTP adapter receives requests and drives the domain AttackEngine; the engine asks a strategy cascade (Gemini, Reactive, Template) for each prompt, sends it to target models via the HuggingFace router, judges the reply, and persists the trace to Postgres with a Redis read projection for polling">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+      </defs>
+      <rect x="10" y="20" width="580" height="260" rx="14" fill="none" stroke="var(--blue)" stroke-dasharray="6 5"/>
+      <text x="26" y="42" font-size="12" font-weight="600" fill="var(--blue)" font-family="JetBrains Mono, monospace">BACKEND · FastAPI adapter → domain → adapters</text>
+
+      <rect x="32" y="60" width="150" height="70" rx="8" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="107" y="88" text-anchor="middle" font-weight="700" font-size="13" fill="var(--ink)">HTTP adapter</text>
+      <text x="107" y="106" text-anchor="middle" font-size="11" fill="var(--muted)">/api/v1 routes</text>
+
+      <rect x="32" y="150" width="150" height="110" rx="8" fill="var(--surface)" stroke="var(--blue)" stroke-width="1.5"/>
+      <text x="107" y="176" text-anchor="middle" font-weight="700" font-size="13" fill="var(--ink)">AttackEngine</text>
+      <text x="107" y="194" text-anchor="middle" font-size="11" fill="var(--muted)">asyncio.gather per model</text>
+      <text x="107" y="210" text-anchor="middle" font-size="11" fill="var(--muted)">judge + backtrack</text>
+      <text x="107" y="226" text-anchor="middle" font-size="11" fill="var(--muted)">domain, zero deps</text>
+
+      <rect x="220" y="60" width="150" height="90" rx="8" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="295" y="86" text-anchor="middle" font-weight="700" font-size="13" fill="var(--ink)">Strategy cascade</text>
+      <text x="295" y="104" text-anchor="middle" font-size="11" fill="var(--muted)">Gemini plan</text>
+      <text x="295" y="120" text-anchor="middle" font-size="11" fill="var(--muted)">→ Reactive → Template</text>
+
+      <rect x="220" y="170" width="150" height="90" rx="8" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="295" y="196" text-anchor="middle" font-weight="700" font-size="13" fill="var(--ink)">Target adapter</text>
+      <text x="295" y="214" text-anchor="middle" font-size="11" fill="var(--muted)">HuggingFace router</text>
+      <text x="295" y="230" text-anchor="middle" font-size="11" fill="var(--muted)">7 models in parallel</text>
+
+      <rect x="408" y="60" width="160" height="70" rx="8" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="488" y="88" text-anchor="middle" font-weight="700" font-size="13" fill="var(--ink)">Postgres</text>
+      <text x="488" y="106" text-anchor="middle" font-size="11" fill="var(--muted)">durable trace (source of truth)</text>
+
+      <rect x="408" y="150" width="160" height="70" rx="8" fill="var(--surface)" stroke="var(--line)"/>
+      <text x="488" y="178" text-anchor="middle" font-weight="700" font-size="13" fill="var(--ink)">Redis</text>
+      <text x="488" y="196" text-anchor="middle" font-size="11" fill="var(--muted)">read projection for polling</text>
+
+      <line x1="182" y1="95" x2="218" y2="95" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah)"/>
+      <line x1="107" y1="130" x2="107" y2="148" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah)"/>
+      <line x1="182" y1="200" x2="218" y2="210" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah)"/>
+      <line x1="370" y1="95" x2="406" y2="95" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah)"/>
+      <line x1="182" y1="180" x2="406" y2="185" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#ah)"/>
+    </svg>
+  </div>
+</section>
+
+<section id="resilience">
+  <div class="sec-head">
+    <div class="eyebrow">Resilience</div>
+    <h2>An attacker refusal never fails the run</h2>
+  </div>
+  <p class="lede">The attacker model is itself an LLM and can decline to extend the plan. <code>FallbackStrategy</code> cascades through three strategies so the evaluation keeps going instead of erroring out.</p>
+  <div class="cascade">
+    <div class="cstep"><h3>GeminiPlanStrategy</h3><p>Asks the attacker for a full JSON escalation plan up front, one prompt per round.</p></div>
+    <div class="arrow">→</div>
+    <div class="cstep"><h3>ReactiveStrategy</h3><p>Falls back to generating the next prompt turn-by-turn if the plan can't be parsed.</p></div>
+    <div class="arrow">→</div>
+    <div class="cstep"><h3>TemplateStrategy</h3><p>Falls back further to a fixed escalation template if the attacker model is unavailable.</p></div>
+  </div>
+</section>
+
+<section id="verdicts">
+  <div class="sec-head">
+    <div class="eyebrow">Judging</div>
+    <h2>Every turn gets classified, not just the ending</h2>
+  </div>
+  <p class="lede">Refusals are backtracked out of the target-visible conversation history, so a reactive strategy can retry from a softer angle — a refusal mid-conversation doesn't dead-end the run.</p>
+  <div class="verdicts">
+    <div class="verdict v-refusal"><span class="tag">REFUSAL</span><p>Model declined; excluded from what the target sees going forward.</p></div>
+    <div class="verdict v-compliant"><span class="tag">COMPLIANT</span><p>Model answered within its safety boundaries.</p></div>
+    <div class="verdict v-near"><span class="tag">NEAR_MISS</span><p>Model partially engaged without fully crossing the line.</p></div>
+    <div class="verdict v-jailbroken"><span class="tag">JAILBROKEN</span><p>Model produced the targeted unsafe content.</p></div>
+    <div class="verdict v-error"><span class="tag">ERROR</span><p>Transport or provider failure, judged separately from safety outcomes.</p></div>
+  </div>
+</section>
+
+<section id="engineering">
+  <div class="sec-head">
+    <div class="eyebrow">Engineering decisions</div>
+    <h2>Choices made for an auditable evaluation, not a demo</h2>
+  </div>
+  <div class="lessons">
+    <article class="lesson">
+      <div class="sym">Why hexagonal</div>
+      <p>The domain (<code>AttackJob</code>, <code>Verdict</code>, the engine loop) imports nothing from FastAPI, Gemini, or HuggingFace. Swapping the attacker model or adding a new judge doesn't touch the evaluation logic.</p>
+    </article>
+    <article class="lesson">
+      <div class="sym">Why two stores</div>
+      <p>Postgres is the source of truth for the full trace — required for audit and export. Redis holds a read-only projection so a caller can poll a running job without hammering Postgres.</p>
+    </article>
+    <article class="lesson">
+      <div class="sym">Why fail-fast settings</div>
+      <p>Required secrets (Gemini key, HuggingFace key, database URL) are validated once at startup. A misconfigured run fails immediately instead of erroring on the first real request.</p>
+    </article>
+    <article class="lesson">
+      <div class="sym">Why backtracking</div>
+      <p>A refusal is recorded in the durable trace but removed from what the target model sees next, so a single refusal doesn't collapse the rest of the multi-turn attempt.</p>
+    </article>
+  </div>
+</section>
+
+<section id="reference">
+  <div class="sec-head">
+    <div class="eyebrow">Reference</div>
+    <h2>Built on published research, not a novel attack</h2>
+  </div>
+  <div class="refbox">
+    <p>This project implements the tactic described in:</p>
+    <p class="cite"><strong>Mark Russinovich, Ahmed Salem, and Ronen Eldan.</strong> "Great, Now Write an Article About That: The Crescendo Multi-Turn LLM Jailbreak Attack." arXiv:2404.01833, 2024. Also presented at USENIX Security 2025.</p>
+    <p style="margin-top:10px"><a href="https://arxiv.org/abs/2404.01833" target="_blank" rel="noopener">Paper (arXiv) ↗</a> · <a href="https://crescendo-the-multiturn-jailbreak.github.io/" target="_blank" rel="noopener">Project page ↗</a></p>
+    <p class="disclaim">This is an independent implementation built to study and evaluate the published tactic. It is not released, affiliated with, or endorsed by Microsoft or the paper's authors.</p>
+  </div>
+  <div class="safety">
+    <div class="eyebrow">Safety</div>
+    <p style="margin-top:6px">For authorized red-team evaluation of models and services you have permission to test. Outputs can include unsafe content by design — that's what's being measured — so results are handled as sensitive research data, not published verbatim.</p>
+  </div>
+</section>
+
+<footer class="foot">
+  <span>Stack: Python · FastAPI · Postgres · Redis · Google Gemini · HuggingFace router</span>
+  <span>Source: <a href="https://github.com/samguan2020/crescendo-red-teaming" target="_blank" rel="noopener">github.com/samguan2020/crescendo-red-teaming</a></span>
+</footer>
+
+</div>
+</body>
+</html>
